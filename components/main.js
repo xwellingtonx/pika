@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState } from "react";
 import domtoimage from "dom-to-image";
 import toast from "react-hot-toast";
 import classnames from "classnames";
@@ -17,7 +17,8 @@ const isValidHexColor = "^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$";
 
 export default function Main() {
   const wrapperRef = useRef();
-  const [blob, setBlob] = useState({ src: null, w: 0, h: 0 });
+  const [blob, setBlob] = useState({ src: null, name: null, w: 0, h: 0 });
+  const [blobs, setBlobs] = useState([]);
   const [bgPicker, setBGPicker] = useState(false);
   const [options, setOptions] = useState({
     aspectRatio: "aspect-auto",
@@ -28,7 +29,7 @@ export default function Main() {
     },
     padding: "p-20",
     rounded: "rounded-xl",
-    roundedWrapper: "rounded-xl",
+    roundedWrapper: "rounded-none",
     shadow: "shadow-xl",
     noise: false,
     browserBar: "hidden",
@@ -90,8 +91,19 @@ export default function Main() {
     });
   };
 
-  const saveImage = async () => {
-    if (!blob?.src) {
+  const saveImage = async (event, index) => {
+    if(!index)
+      index = 0;
+
+    if(index == blobs.length)
+      return;
+
+    setBlob({...blob, src: blobs[index].src, name: blobs[index].name});
+
+    var img = wrapperRef.current.getElementsByTagName('img');
+    img.irc = blobs[index].src;
+
+    if (!blobs[index]?.src) {
       toast.error("Nothing to save, make sure to add a screenshot first!");
       return;
     }
@@ -112,28 +124,22 @@ export default function Main() {
         },
       })
       .then(async (data) => {
-        domtoimage
-          .toPng(wrapperRef.current, {
-            height: wrapperRef.current.offsetHeight * scale,
-            width: wrapperRef.current.offsetWidth * scale,
-            style: {
-              transform: "scale(" + scale + ")",
-              transformOrigin: "top left",
-              width: wrapperRef.current.offsetWidth + "px",
-              height: wrapperRef.current.offsetHeight + "px",
-            },
-          })
-          .then(async (data) => {
-            var a = document.createElement("A");
-            a.href = data;
-            a.download = `pika-${new Date().toISOString()}.png`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            toast.success("Image exported!", { id: savingToast });
-          });
+        var a = document.createElement("A");
+        a.href = data;
+        a.download = `pika-${blobs[index]?.name}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        toast.success("Image exported!", { id: savingToast });
+
+        saveImage(null, index + 1);
       });
-  };
+  }
+
+  const reset = () => {
+    setBlob({});
+    setBlobs([]);
+  }
 
   const copyImage = () => {
     if (!blob?.src) {
@@ -204,9 +210,15 @@ export default function Main() {
       if (item.kind === "file" || item?.type?.includes("image")) {
         var blob = item?.kind ? item.getAsFile() : item;
         var reader = new FileReader();
-        reader.onload = function (event) {
-          setBlob({ ...blob, src: event.target.result });
-        };
+        reader.onload = (function (currBlob) {
+          return function(event) {
+            var blobName = currBlob.name.split(".")[0];
+            console.log(blobName);
+            setBlob({ ...blob, src: event.target.result, name: blobName });
+            
+            blobs.push({src: event.target.result, name: blobName});
+          }
+        })(blob);
         reader.readAsDataURL(blob);
       }
     }
@@ -582,7 +594,7 @@ export default function Main() {
               </div>
             </div>
             <div
-              onClick={() => setBlob({})}
+              onClick={reset}
               className="flex items-center justify-center w-full px-3 py-1 mx-auto mt-4 text-sm text-pink-400 rounded-lg cursor-pointer"
             >
               <span className="w-4 h-4 mr-1">{ResetIcon}</span>
@@ -722,7 +734,7 @@ export default function Main() {
                       : {}
                   }
                   className={classnames(
-                    "transition-all duration-200 relative ease-in-out flex items-center justify-center overflow-hidden max-w-[80vw] flex-col",
+                    "transition-all duration-200 relative ease-in-out flex items-center justify-center max-w-[80vw] flex-col",
                     options?.aspectRatio,
                     options?.padding,
                     options?.position,
@@ -775,6 +787,7 @@ export default function Main() {
                 htmlFor="imagesUpload"
               >
                 <input
+                  multiple
                   className="hidden"
                   id="imagesUpload"
                   type="file"
